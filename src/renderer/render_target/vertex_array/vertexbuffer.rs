@@ -46,10 +46,7 @@ where
 
     /// Calculates the inner byte size of all vertices
     fn calculate_vertices_size(&self) -> usize {
-        self.vertices()
-            .first()
-            .expect("There is no vertex defined")
-            .get_definition()
+        VERTEX::get_definition()
             .full_size()
             * self.vertices().len()
     }
@@ -61,28 +58,23 @@ where
         let mut stride = 0;
 
         // Fetch definition of vertex
-        let definer = self
-            .vertices()
-            .first()
-            .expect("There is no vertex defined")
-            .get_definition();
+        let definer = VERTEX::get_definition();
 
         // Todo: Support vertex attrib pointer with size larger than 4
         for field in definer.fields() {
-            debug!("{:?}", (*field.count(), field.kind().get_opengl_enum(), *field.size(), stride));
             unsafe {
                 gl::VertexAttribPointer(
                     index,
-                    *field.count() as gl::types::GLint,
+                    field.count() as gl::types::GLint,
                     field.kind().get_opengl_enum(),
                     gl::FALSE,
-                    *field.size() as gl::types::GLint,
+                    definer.full_size() as gl::types::GLint,
                     stride as *const gl::types::GLvoid,
                 );
                 gl::EnableVertexAttribArray(index);
             }
 
-            stride += *field.size();
+            stride += field.size();
             index += 1;
         }
     }
@@ -104,13 +96,13 @@ where
 {
     fn bind(&self) {
         unsafe {
-            gl::BindBuffer(gl::VERTEX_ARRAY, self.id);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.id);
         }
     }
 
     fn unbind(&self) {
         unsafe {
-            gl::BindBuffer(gl::VERTEX_ARRAY, 0);
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
     }
 }

@@ -1,7 +1,14 @@
-use self::{indexbuffer::IndexBuffer, vertex::Vertex, vertexbuffer::VertexBuffer};
+use self::{indexbuffer::IndexBuffer, vertexbuffer::VertexBuffer};
 use crate::renderer::buffer::Buffer;
 
-pub mod vertex;
+mod vertex;
+
+pub use vertex::Vertex;
+pub use vertex::VertexDefiner;
+pub use vertex::VertexDefinerField;
+pub use vertex::VertexDefinerFieldKind;
+pub use vertex::VerticesArray;
+pub use vertex::DefaultVertex;
 
 pub mod indexbuffer;
 pub mod vertexbuffer;
@@ -31,6 +38,7 @@ where
             gl::BindVertexArray(vertex_array);
         }
 
+        // Define vertex array object
         let vao = VertexArrayObject {
             identifier,
             vertex_array,
@@ -38,10 +46,9 @@ where
             index_buffer: IndexBuffer::new(indices),
         };
 
-        // vao.vertex_buffer().unbind();
-        // vao.index_buffer().unbind();
-
-        // vao.bind_all();
+        // Rebind buffers
+        vao.unbind_all();
+        vao.bind_all();
 
         vao
     }
@@ -60,14 +67,14 @@ where
         }
     }
 
-    /// Binds all buffers with vertex array
+    /// Binds all buffers with vertex array. Used for resetting all bindings
     pub fn bind_all(&self) {
         self.bind();
         self.vertex_buffer.bind();
         self.index_buffer.bind();
     }
 
-    /// Unbinds all buffers with vertex array
+    /// Unbinds all buffers with vertex array. Used for resetting all bindings
     pub fn unbind_all(&self) {
         self.unbind();
         self.vertex_buffer.unbind();

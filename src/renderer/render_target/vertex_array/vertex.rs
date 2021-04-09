@@ -36,23 +36,23 @@ pub struct VertexDefinerField<'a> {
 }
 
 impl<'a> VertexDefinerField<'a> {
-    pub fn new<T>(name: &'a str, count: usize, obj: &T, kind: VertexDefinerFieldKind) -> Self {
+    pub fn new(name: &'a str, count: usize, size: usize, kind: VertexDefinerFieldKind) -> Self {
         VertexDefinerField {
             name,
             kind,
             count,
-            size: std::mem::size_of_val(obj),
+            size,
         }
     }
 
-    /// Get a reference to the vertex definer field's size.
-    pub fn size(&self) -> &usize {
-        &self.size
+    /// Get the vertex definer field's size.
+    pub fn size(&self) -> usize {
+        self.size
     }
 
-    /// Get a reference to the vertex definer field's count.
-    pub fn count(&self) -> &usize {
-        &self.count
+    /// Get the vertex definer field's count.
+    pub fn count(&self) -> usize {
+        self.count
     }
 
     /// Get a reference to the vertex definer field's name.
@@ -133,7 +133,7 @@ impl<'a> VertexDefiner<'a> {
         return size;
     }
 
-    /// Get a reference to the vertex definer's fields.
+    /// Get a reference to the vertex definer's fields as an iterator.
     pub fn fields(&self) -> std::slice::Iter<'_, VertexDefinerField<'_>> {
         self.fields.iter()
     }
@@ -141,6 +141,7 @@ impl<'a> VertexDefiner<'a> {
 
 // Todo: Refactor with associated types defaults once available
 pub trait Vertex<'a> {
-    // Package all the data in a vertex into an vector with f32
-    fn get_definition(&self) -> VertexDefiner<'a>;
+    /// Get the inner defintion of the vertex data structure. <br>
+    /// **Fields shall have the same name as the corresponding shader variable**
+    fn get_definition() -> VertexDefiner<'a>;
 }

@@ -1,13 +1,13 @@
-use std::path::Path;
 use std::{collections::HashMap, sync::RwLock};
 
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
-use render_target::{vertex_array::vertex::DefaultVertex, RenderTarget};
+use render_target::{vertex_array::DefaultVertex, RenderTarget};
+use shader::shader::{FragmentShader, VertexShader};
 
 use crate::color::prelude::*;
 use pipeline_info::PipelineInfo;
 
-use self::{global::Global, shaderprogram::ShaderProgram};
+use self::{global::Global, shader::ShaderProgram};
 
 type GLWindow = ContextWrapper<PossiblyCurrent, Window>;
 
@@ -17,15 +17,14 @@ pub mod global;
 pub mod pipeline_info;
 pub mod render_target;
 pub mod shader;
-pub mod shaderprogram;
 
 pub struct Renderer<'a, const T: usize> {
     window: GLWindow,
     plinfo: Option<PipelineInfo<'a>>,
     clear_color: RGBAColor<f32>,
-    shader_programs: HashMap<&'a str, ShaderProgram<2>>,
-    current_program: gl::types::GLuint,
     global: RwLock<Global>,
+
+    shader_programs: HashMap<&'a str, ShaderProgram>,
 
     debug: Option<RenderTarget<'a, DefaultVertex, 4, 6>>,
 }
@@ -35,10 +34,10 @@ impl<'a, const T: usize> Renderer<'a, T> {
         Renderer {
             window,
             plinfo: None,
-            shader_programs: HashMap::new(),
-            current_program: 0,
             clear_color: (HexColor::<u8>::new(0x131519).rgba() / 255),
             global: Global::new(),
+
+            shader_programs: HashMap::new(),
 
             debug: None,
         }
@@ -53,7 +52,10 @@ impl<'a, const T: usize> Renderer<'a, T> {
 
         // Enable OpenGL debug logging
         unsafe {
-            gl::DebugMessageCallback(Some(super::opengl_error_handling), 0 as *const gl::types::GLvoid);
+            gl::DebugMessageCallback(
+                Some(super::opengl_error_handling),
+                0 as *const gl::types::GLvoid,
+            );
         }
 
         // Request pipeline information
@@ -76,25 +78,31 @@ impl<'a, const T: usize> Renderer<'a, T> {
         );
 
         let vertices = [
-            DefaultVertex::new((-0.5, -0.5, 0.0)),
-            DefaultVertex::new((0.5, -0.5, 0.0)),
-            DefaultVertex::new((0.5, 0.5, 0.0)),
-            DefaultVertex::new((-0.5, 0.5, 0.0)),
+            DefaultVertex::new((-0.5, -0.5, 0.0), (1.0, 0.6, 0.3)),
+            DefaultVertex::new((0.5, -0.5, 0.0), (1.0, 0.6, 0.3)),
+            DefaultVertex::new((0.5, 0.5, 0.0), (1.0, 0.6, 0.3)),
+            DefaultVertex::new((-0.5, 0.5, 0.0), (1.0, 0.6, 0.3)),
         ];
         self.debug = Some(RenderTarget::new(vertices, [0, 1, 2, 2, 3, 0]));
 
         // Load default shader
         info!("Loading default shader");
-        let program = ShaderProgram::<2>::load_shaders_from_file(
-            &Path::new("./assets/shaders/default.vert"),
-            &Path::new("./assets/shaders/default.frag"),
-        )
-        .expect("Failed loading default shader");
+        let raw = include_str!("../assets/shaders/default.frag").to_string();
+        let raw = std::ffi::CString::new(raw).expect("Failed at conveting shader to CString");
+        let default_fragment =
+            FragmentShader::from_source(raw.as_c_str()).expect("Failed to compile fragment");
+        let raw = include_str!("../assets/shaders/default.vert").to_string();
+        let raw = std::ffi::CString::new(raw).expect("Failed at conveting shader to CString");
+        let default_vertex =
+            VertexShader::from_source(raw.as_c_str()).expect("Failed to compile vertex");
+        let default_program = ShaderProgram::new::<DefaultVertex>(vec![
+            Box::new(default_fragment),
+            Box::new(default_vertex),
+        ])
+        .expect("Failed to set-up shader program");
 
-        program.bind();
-        self.current_program = *program.id();
-
-        self.shader_programs.insert("default", program);
+        // Assign default shader
+        self.shader_programs.insert("default", default_program);
 
         info!("Finished activating renderer");
     }

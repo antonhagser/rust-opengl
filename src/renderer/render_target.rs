@@ -1,4 +1,4 @@
-use self::vertex_array::{VertexArrayObject, vertex::Vertex};
+use self::vertex_array::{VertexArrayObject, Vertex};
 
 pub mod vertex_array;
 

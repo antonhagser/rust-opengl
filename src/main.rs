@@ -9,10 +9,9 @@ pub mod renderer;
 extern crate log;
 
 fn main() {
+    // Initialize logger
     std::env::set_var("RUST_LOG", "engine");
-
     env_logger::init();
-    
     info!("Loading OpenGL graphics engine");
 
     let event_loop = glutin::event_loop::EventLoop::new();
@@ -98,7 +97,7 @@ pub extern "system" fn opengl_error_handling(
 
     warn!(
         "{}{} {:#X} {} {:#X} {} {:#X} {} {:#X} {} {}",
-        "OpenGL Error:\n\t".blue(),
+        "OpenGL Error:\n\t",
         "Source:".green(),
         source,
         "Kind:".green(),
