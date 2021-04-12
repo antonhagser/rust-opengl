@@ -1,25 +1,90 @@
 #version 330 core
 
-layout(location = 0) out vec4 Color;
+layout(location=0)out vec4 Color;
 
-in vec4 o_Color;
+precision highp float;
 
-highp float rand(vec2 co)
-{
-    highp float a = 12.9898;
-    highp float b = 78.233;
-    highp float c = 43758.5453;
-    highp float dt= dot(co.xy ,vec2(a,b));
-    highp float sn= mod(dt,3.14);
-    return fract(sin(sn) * c);
+uniform float u_DeltaTime;
+uniform float u_Time;
+uniform uvec2 u_Resolution;
+uniform vec2 u_Mouse;
+
+#define iResolution vec3(u_Resolution, 1.0)
+#define iTime u_Time
+#define iMouse vec4(u_Mouse, 0.0, 0.0)
+#define iTimeDelta u_DeltaTime
+
+mat2 rot(float a) {
+    float c = cos(a), s = sin(a);
+    return mat2(c,s,-s,c);
 }
 
-void main()
-{
-    float rand_1 = rand(vec2(43, 545));
-    float rand_2 = rand(vec2(5, -45));
-    float rand_3 = rand(vec2(-345, 73));
+const float pi = acos(-1.0);
+const float pi2 = pi*2.0;
 
-    // Color = vec4(0.2627 * rand_1, 0.5176 * rand_2, 0.8549 * rand_3, 1.0);
-    Color = o_Color;
+vec2 pmod(vec2 p, float r) {
+    float a = atan(p.x, p.y) + pi/r;
+    float n = pi2 / r;
+    a = floor(a/n)*n;
+    return p*rot(-a);
+}
+
+float box( vec3 p, vec3 b ) {
+    vec3 d = abs(p) - b;
+    return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
+}
+
+float ifsBox(vec3 p) {
+    for (int i=0; i<5; i++) {
+        p = abs(p) - 1.0;
+        p.xy *= rot(iTime*0.3);
+        p.xz *= rot(iTime*0.1);
+    }
+    p.xz *= rot(iTime);
+    return box(p, vec3(0.4,0.8,0.3));
+}
+
+float map(vec3 p, vec3 cPos) {
+    vec3 p1 = p;
+    p1.x = mod(p1.x-5., 10.) - 5.;
+    p1.y = mod(p1.y-5., 10.) - 5.;
+    p1.z = mod(p1.z, 16.)-8.;
+    p1.xy = pmod(p1.xy, 5.0);
+    return ifsBox(p1);
+}
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
+  vec2 p = (fragCoord.xy * 2.0 - iResolution.xy) / min(iResolution.x, iResolution.y);
+
+  vec3 cPos = vec3(0.0,0.0, -3.0 * iTime);
+  // vec3 cPos = vec3(0.3*sin(iTime*0.8), 0.4*cos(iTime*0.3), -6.0 * iTime);
+  vec3 cDir = normalize(vec3(0.0, 0.0, -1.0));
+  vec3 cUp  = vec3(sin(iTime), 1.0, 0.0);
+  vec3 cSide = cross(cDir, cUp);
+
+  vec3 ray = normalize(cSide * p.x + cUp * p.y + cDir);
+
+  // Phantom Mode https://www.shadertoy.com/view/MtScWW by aiekick
+  float acc = 0.0;
+  float acc2 = 0.0;
+  float t = 0.0;
+  for (int i = 0; i < 99; i++) {
+      vec3 pos = cPos + ray * t;
+      float dist = map(pos, cPos);
+      dist = max(abs(dist), 0.02);
+      float a = exp(-dist*3.0);
+      if (mod(length(pos)+24.0*iTime, 30.0) < 3.0) {
+          a *= 2.0;
+          acc2 += a;
+      }
+      acc += a;
+      t += dist * 0.5;
+  }
+
+  vec3 col = vec3(acc * 0.01, acc * 0.011 + acc2*0.002, acc * 0.012+ acc2*0.005);
+  fragColor = vec4(col, 1.0 - t * 0.03);
+}
+
+void main() {
+  mainImage(Color, gl_FragCoord.xy);
 }

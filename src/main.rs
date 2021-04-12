@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
+use assets::{Asset, AssetKind, AssetManager};
 use renderer::Renderer;
 
+pub mod assets;
 pub mod color;
 pub mod renderer;
 
@@ -27,12 +29,22 @@ fn main() {
 
     // Initialize renderer
     let mut renderer = Renderer::<2>::new(gl_window);
+    let asset_manager = AssetManager::new();
 
     // Trigger awake function and load opengl
     renderer.awake();
+    renderer.register_asset_manager(asset_manager);
+    let manager = renderer.asset_manager().as_mut().unwrap();
+    manager.awake_hotreload("./assets/".into());
+    
+    let pathbuf = std::path::Path::new("./assets/shaders/default.vert").to_path_buf();
+    let asset = Asset::new(pathbuf.clone(), AssetKind::Text).unwrap();
+    manager.create_asset(asset);
+    manager.register_for_hotreload(pathbuf);
 
     // Start time
     let start_time = std::time::Instant::now();
+    let mut last_delta: f32 = 0.0;
 
     // Run window event loop
     info!("Starting window event loop");
@@ -43,6 +55,13 @@ fn main() {
         match event {
             Event::LoopDestroyed => return,
             Event::WindowEvent { event, .. } => match event {
+                WindowEvent::CursorMoved {
+                    device_id: _,
+                    position,
+                    modifiers: _,
+                } => {
+                    renderer.pos = (position.x, position.y);
+                }
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                 WindowEvent::Resized(e) => {
                     unsafe {
@@ -57,7 +76,7 @@ fn main() {
                 _ => (),
             },
             Event::RedrawRequested(_) => {
-                renderer.draw();
+                renderer.draw(last_delta);
                 renderer.swap_buffers();
             }
             _ => (),
@@ -66,9 +85,9 @@ fn main() {
             ControlFlow::Exit => (),
             _ => {
                 renderer.window().window().request_redraw();
-                let elapsed_time = std::time::Instant::now()
-                    .duration_since(start_time)
-                    .as_millis() as u64;
+                let elapsed_time = std::time::Instant::now().duration_since(start_time);
+                last_delta = elapsed_time.as_secs_f32();
+                let elapsed_time = elapsed_time.as_millis() as u64;
 
                 let wait_millis = match 1000 / 144 >= elapsed_time {
                     true => 1000 / 144 - elapsed_time,

@@ -1,25 +1,31 @@
-use std::ffi::CString;
-
-use self::{shader::Shader, uniform::Uniform};
+use std::{collections::HashMap, ffi::CString};
 
 use super::render_target::vertex_array::Vertex;
 
-pub mod kind;
-pub mod shader;
+pub use kind::ShaderKind;
+pub use shader::{FragmentShader, Shader, VertexShader};
+pub use uniform::Uniform;
 
+mod kind;
+mod shader;
 mod uniform;
 
-pub struct ShaderProgram {
+pub struct ShaderProgram<'a> {
     shaders: Vec<Box<dyn Shader>>,
+    locations: HashMap<&'a str, gl::types::GLuint>,
     id: gl::types::GLuint,
 }
 
-impl ShaderProgram {
-    pub fn new<'a, T>(shaders: Vec<Box<dyn Shader>>) -> Result<Self, String>
+impl<'a> ShaderProgram<'a> {
+    pub fn new<'v, T>(shaders: Vec<Box<dyn Shader>>) -> Result<Self, String>
     where
-        T: Vertex<'a>,
+        T: Vertex<'v>,
     {
-        let mut sp = ShaderProgram { shaders, id: 0 };
+        let mut sp = ShaderProgram {
+            shaders,
+            locations: HashMap::new(),
+            id: 0,
+        };
 
         // Create shader program
         trace!("Creating shader program");
@@ -30,7 +36,7 @@ impl ShaderProgram {
         // Attach the shader objects to the program
         for shader in sp.shaders.iter() {
             unsafe {
-                gl::AttachShader(*sp.id(), shader.id());
+                gl::AttachShader(sp.id(), shader.id());
             }
         }
 
@@ -48,7 +54,7 @@ impl ShaderProgram {
         // Detach shaders to allow OpenGL to delete shaders
         for shader in sp.shaders.iter() {
             unsafe {
-                gl::DetachShader(*sp.id(), shader.id());
+                gl::DetachShader(sp.id(), shader.id());
             }
         }
 
@@ -65,14 +71,14 @@ impl ShaderProgram {
         // Get linking status
         let mut success: gl::types::GLint = 1;
         unsafe {
-            gl::GetProgramiv(*self.id(), gl::LINK_STATUS, &mut success);
+            gl::GetProgramiv(self.id(), gl::LINK_STATUS, &mut success);
         }
 
         if success == 0 {
             // Get info about non successfull error
             let mut len: gl::types::GLint = 0;
             unsafe {
-                gl::GetProgramiv(*self.id(), gl::INFO_LOG_LENGTH, &mut len);
+                gl::GetProgramiv(self.id(), gl::INFO_LOG_LENGTH, &mut len);
             }
 
             let mut buffer: Vec<u8> = Vec::with_capacity(len as usize + 1);
@@ -81,7 +87,7 @@ impl ShaderProgram {
 
             unsafe {
                 gl::GetProgramInfoLog(
-                    *self.id(),
+                    self.id(),
                     len,
                     std::ptr::null_mut(),
                     error.as_ptr() as *mut gl::types::GLchar,
@@ -96,7 +102,7 @@ impl ShaderProgram {
 
     /// Bind program
     pub fn bind(&self) {
-        unsafe { gl::UseProgram(*self.id()) }
+        unsafe { gl::UseProgram(self.id()) }
     }
 
     // Unbind program
@@ -106,150 +112,467 @@ impl ShaderProgram {
         }
     }
 
+    fn get_uniform_location(&mut self, location: &'a str) -> Result<gl::types::GLuint, String> {
+        let loc = self.locations.get(location);
+        match loc {
+            Some(l) => Ok(*l),
+            None => {
+                let location = CString::new(location);
+                let location = match location {
+                    Ok(c) => c,
+                    Err(e) => return Err(format!("Failed to parse location {}", e)),
+                };
+                let loc = unsafe { gl::GetUniformLocation(self.id(), location.as_ptr()) };
+
+                Ok(loc as gl::types::GLuint)
+            }
+        }
+    }
+
     /// Get a reference to the shader program's id.
-    pub fn id(&self) -> &gl::types::GLuint {
-        &self.id
+    pub fn id(&self) -> gl::types::GLuint {
+        self.id
     }
 }
 
-impl Uniform for ShaderProgram {
-    fn uniform1f(&self, location: &std::ffi::CStr, v0: f32) -> Result<(), String> {
-        todo!()
+impl<'a> Uniform<'a> for ShaderProgram<'a> {
+    fn uniform1f(&mut self, location: &'a str, v0: f32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform1f(loc as gl::types::GLint, v0);
+        }
+
+        Ok(())
     }
 
-    fn uniform2f(&self, location: &std::ffi::CStr, v0: f32, v1: f32) -> Result<(), String> {
-        todo!()
+    fn uniform2f(&mut self, location: &'a str, v0: f32, v1: f32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform2f(loc as gl::types::GLint, v0, v1);
+        }
+
+        Ok(())
     }
 
-    fn uniform3f(&self, location: &std::ffi::CStr, v0: f32, v1: f32, v2: f32) -> Result<(), String> {
-        todo!()
+    fn uniform3f(&mut self, location: &'a str, v0: f32, v1: f32, v2: f32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform3f(loc as gl::types::GLint, v0, v1, v2);
+        }
+
+        Ok(())
     }
 
-    fn uniform4f(&self, location: &std::ffi::CStr, v0: f32, v1: f32, v2: f32, v3: f32) -> Result<(), String> {
-        todo!()
+    fn uniform4f(
+        &mut self,
+        location: &'a str,
+        v0: f32,
+        v1: f32,
+        v2: f32,
+        v3: f32,
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform4f(loc as gl::types::GLint, v0, v1, v2, v3);
+        }
+
+        Ok(())
     }
 
-    fn uniform1i(&self, location: &std::ffi::CStr, v0: i32) -> Result<(), String> {
-        todo!()
+    fn uniform1i(&mut self, location: &'a str, v0: i32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform1i(loc as gl::types::GLint, v0);
+        }
+
+        Ok(())
     }
 
-    fn uniform2i(&self, location: &std::ffi::CStr, v0: i32, v1: i32) -> Result<(), String> {
-        todo!()
+    fn uniform2i(&mut self, location: &'a str, v0: i32, v1: i32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform2i(loc as gl::types::GLint, v0, v1);
+        }
+
+        Ok(())
     }
 
-    fn uniform3i(&self, location: &std::ffi::CStr, v0: i32, v1: i32, v2: i32) -> Result<(), String> {
-        todo!()
+    fn uniform3i(&mut self, location: &'a str, v0: i32, v1: i32, v2: i32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform3i(loc as gl::types::GLint, v0, v1, v2);
+        }
+
+        Ok(())
     }
 
-    fn uniform4i(&self, location: &std::ffi::CStr, v0: i32, v1: i32, v2: i32, v3: i32) -> Result<(), String> {
-        todo!()
+    fn uniform4i(
+        &mut self,
+        location: &'a str,
+        v0: i32,
+        v1: i32,
+        v2: i32,
+        v3: i32,
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform4i(loc as gl::types::GLint, v0, v1, v2, v3);
+        }
+
+        Ok(())
     }
 
-    fn uniform1ui(&self, location: &std::ffi::CStr, v0: u32) -> Result<(), String> {
-        todo!()
+    fn uniform1ui(&mut self, location: &'a str, v0: u32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform1ui(loc as gl::types::GLint, v0);
+        }
+
+        Ok(())
     }
 
-    fn uniform2ui(&self, location: &std::ffi::CStr, v0: u32, v1: u32) -> Result<(), String> {
-        todo!()
+    fn uniform2ui(&mut self, location: &'a str, v0: u32, v1: u32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform2ui(loc as gl::types::GLint, v0, v1);
+        }
+
+        Ok(())
     }
 
-    fn uniform3ui(&self, location: &std::ffi::CStr, v0: u32, v1: u32, v2: u32) -> Result<(), String> {
-        todo!()
+    fn uniform3ui(&mut self, location: &'a str, v0: u32, v1: u32, v2: u32) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform3ui(loc as gl::types::GLint, v0, v1, v2);
+        }
+
+        Ok(())
     }
 
-    fn uniform4ui(&self, location: &std::ffi::CStr, v0: u32, v1: u32, v2: u32, v3: u32) -> Result<(), String> {
-        todo!()
+    fn uniform4ui(
+        &mut self,
+        location: &'a str,
+        v0: u32,
+        v1: u32,
+        v2: u32,
+        v3: u32,
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform4ui(loc as gl::types::GLint, v0, v1, v2, v3);
+        }
+
+        Ok(())
     }
 
-    fn uniform1fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform1fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [f32; 1],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform1fv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform2fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform2fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [f32; 2],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform2fv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform3fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform3fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [f32; 3],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform3fv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform4fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform4fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [f32; 4],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform4fv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform1iv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const i32) -> Result<(), String> {
-        todo!()
+    fn uniform1iv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [i32; 1],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform1iv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform2iv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const i32) -> Result<(), String> {
-        todo!()
+    fn uniform2iv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [i32; 2],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform2iv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform3iv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const i32) -> Result<(), String> {
-        todo!()
+    fn uniform3iv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [i32; 3],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform3iv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform4iv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const i32) -> Result<(), String> {
-        todo!()
+    fn uniform4iv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [i32; 4],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform4iv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform1uiv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const u32) -> Result<(), String> {
-        todo!()
+    fn uniform1uiv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [u32; 1],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform1uiv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform2uiv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const u32) -> Result<(), String> {
-        todo!()
+    fn uniform2uiv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [u32; 2],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform2uiv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform3uiv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const u32) -> Result<(), String> {
-        todo!()
+    fn uniform3uiv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [u32; 3],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform3uiv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform4uiv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, value: *const u32) -> Result<(), String> {
-        todo!()
+    fn uniform4uiv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        value: [u32; 4],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::Uniform4uiv(loc as gl::types::GLint, count, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix2fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix2fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 4],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix2fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix3fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix3fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 9],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix3fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix4fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix4fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 16],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix4fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix2x3fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix2x3fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 6],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix2x3fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix3x2fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix3x2fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 6],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix3x2fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix2x4fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix2x4fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 8],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix2x4fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix4x2fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix4x2fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 8],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix4x2fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix3x4fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix3x4fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 12],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix3x4fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 
-    fn uniform_matrix4x3fv(&self, location: &std::ffi::CStr, count: gl::types::GLsizei, transpose: gl::types::GLboolean, value: *const f32) -> Result<(), String> {
-        todo!()
+    fn uniform_matrix4x3fv(
+        &mut self,
+        location: &'a str,
+        count: gl::types::GLsizei,
+        transpose: gl::types::GLboolean,
+        value: [f32; 12],
+    ) -> Result<(), String> {
+        let loc = self.get_uniform_location(location)?;
+        unsafe {
+            gl::UniformMatrix4x3fv(loc as gl::types::GLint, count, transpose, value.as_ptr());
+        }
+
+        Ok(())
     }
 }
 
-impl Drop for ShaderProgram {
+impl<'a> Drop for ShaderProgram<'a> {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteProgram(*self.id());
+            gl::DeleteProgram(self.id());
             for shader in self.shaders.iter() {
                 drop(shader);
             }

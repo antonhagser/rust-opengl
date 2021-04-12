@@ -7,6 +7,6 @@ out vec4 o_Color;
 
 void main()
 {
+    o_Color=vec4(Color * Position,1.);
     gl_Position=vec4(Position,1.);
-    o_Color=vec4(Color,1.);
 }

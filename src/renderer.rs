@@ -2,12 +2,15 @@ use std::{collections::HashMap, sync::RwLock};
 
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
 use render_target::{vertex_array::DefaultVertex, RenderTarget};
-use shader::shader::{FragmentShader, VertexShader};
+use shader::{FragmentShader, VertexShader};
 
-use crate::color::prelude::*;
+use crate::{assets::AssetManager, color::prelude::*};
 use pipeline_info::PipelineInfo;
 
-use self::{global::Global, shader::ShaderProgram};
+use self::{
+    global::Global,
+    shader::{ShaderProgram, Uniform},
+};
 
 type GLWindow = ContextWrapper<PossiblyCurrent, Window>;
 
@@ -24,9 +27,12 @@ pub struct Renderer<'a, const T: usize> {
     clear_color: RGBAColor<f32>,
     global: RwLock<Global>,
 
-    shader_programs: HashMap<&'a str, ShaderProgram>,
+    asset_manager: Option<AssetManager>,
+    shader_programs: HashMap<&'a str, ShaderProgram<'a>>,
 
     debug: Option<RenderTarget<'a, DefaultVertex, 4, 6>>,
+
+    pub(crate) pos: (f64, f64),
 }
 
 impl<'a, const T: usize> Renderer<'a, T> {
@@ -37,9 +43,12 @@ impl<'a, const T: usize> Renderer<'a, T> {
             clear_color: (HexColor::<u8>::new(0x131519).rgba() / 255),
             global: Global::new(),
 
+            asset_manager: None,
             shader_programs: HashMap::new(),
 
             debug: None,
+
+            pos: (0., 0.)
         }
     }
 
@@ -78,10 +87,10 @@ impl<'a, const T: usize> Renderer<'a, T> {
         );
 
         let vertices = [
-            DefaultVertex::new((-0.5, -0.5, 0.0), (1.0, 0.6, 0.3)),
-            DefaultVertex::new((0.5, -0.5, 0.0), (1.0, 0.6, 0.3)),
-            DefaultVertex::new((0.5, 0.5, 0.0), (1.0, 0.6, 0.3)),
-            DefaultVertex::new((-0.5, 0.5, 0.0), (1.0, 0.6, 0.3)),
+            DefaultVertex::new((-1.0, -1.0, 0.0), (1.0, 0.6, 0.3)),
+            DefaultVertex::new((1.0, -1.0, 0.0), (1.0, 0.6, 0.3)),
+            DefaultVertex::new((1.0, 1.0, 0.0), (1.0, 0.6, 0.3)),
+            DefaultVertex::new((-1.0, 1.0, 0.0), (1.0, 0.6, 0.3)),
         ];
         self.debug = Some(RenderTarget::new(vertices, [0, 1, 2, 2, 3, 0]));
 
@@ -108,12 +117,30 @@ impl<'a, const T: usize> Renderer<'a, T> {
     }
 
     // Trigger draw
-    pub fn draw(&mut self) {
+    pub fn draw(&mut self, delta_time: f32) {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
-        self.shader_programs.get("default").unwrap().bind();
+        let window_inner_size = self.window().window().inner_size();
+        let def = self.shader_programs.get_mut("default").unwrap();
+
+        def.bind();
+
+        def.uniform2uiv(
+            "u_Resolution",
+            1,
+            [window_inner_size.width, window_inner_size.height],
+        )
+        .expect("Failed assigning uniform");
+        def.uniform2fv(
+            "u_Mouse",
+            1,
+            [self.pos.0 as f32, self.pos.1 as f32],
+        )
+        .expect("Failed assigning uniform");
+        def.uniform1f("u_DeltaTime", delta_time).expect("failed to assign deltatime");
+        def.uniform1f("u_Time", self.global.read().unwrap().start_time().elapsed().as_secs_f32()).expect("failed to assign deltatime");
         self.debug.as_ref().unwrap().draw();
     }
 
@@ -122,6 +149,11 @@ impl<'a, const T: usize> Renderer<'a, T> {
         self.window()
             .swap_buffers()
             .expect("Failed to swap buffers");
+    }
+
+    /// Register a new asset manager
+    pub fn register_asset_manager(&mut self, asset_manager: AssetManager) {
+        self.asset_manager = Some(asset_manager);
     }
 
     /// Get a reference to the renderer's window.
@@ -151,5 +183,10 @@ impl<'a, const T: usize> Renderer<'a, T> {
     /// Get a reference to the renderer's clear color.
     pub fn clear_color(&self) -> &RGBAColor<f32> {
         &self.clear_color
+    }
+
+    /// Get a reference to the renderer's asset manager.
+    pub fn asset_manager(&mut self) -> &mut Option<AssetManager> {
+        &mut self.asset_manager
     }
 }
