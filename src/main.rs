@@ -1,6 +1,6 @@
-#![allow(dead_code)]
+#![allow(dead_code, deprecated)]
 
-use assets::{Asset, AssetKind, AssetManager};
+use assets::AssetManager;
 use renderer::Renderer;
 
 pub mod assets;
@@ -29,18 +29,14 @@ fn main() {
 
     // Initialize renderer
     let mut renderer = Renderer::<2>::new(gl_window);
-    let asset_manager = AssetManager::new();
+    let mut asset_manager = AssetManager::new();
+    asset_manager.awake_hotreload("./assets/".into());
+
+    // Register asset manager
+    renderer.register_asset_manager(asset_manager);
 
     // Trigger awake function and load opengl
     renderer.awake();
-    renderer.register_asset_manager(asset_manager);
-    let manager = renderer.asset_manager().as_mut().unwrap();
-    manager.awake_hotreload("./assets/".into());
-    
-    let pathbuf = std::path::Path::new("./assets/shaders/default.vert").to_path_buf();
-    let asset = Asset::new(pathbuf.clone(), AssetKind::Text).unwrap();
-    manager.create_asset(asset);
-    manager.register_for_hotreload(pathbuf);
 
     // Start time
     let start_time = std::time::Instant::now();
@@ -76,6 +72,9 @@ fn main() {
                 _ => (),
             },
             Event::RedrawRequested(_) => {
+                #[cfg(debug_assertions)]
+                renderer.update_editor();
+
                 renderer.draw(last_delta);
                 renderer.swap_buffers();
             }

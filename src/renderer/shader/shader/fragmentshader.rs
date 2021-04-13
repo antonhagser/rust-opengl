@@ -2,7 +2,7 @@ use std::ffi::CStr;
 
 use crate::renderer::shader::kind::ShaderKind;
 
-use super::{Shader};
+use super::Shader;
 
 pub struct FragmentShader {
     id: gl::types::GLuint,
@@ -14,8 +14,8 @@ impl FragmentShader {
         let id =
             unsafe { gl::CreateShader(ShaderKind::as_opengl_enum(&ShaderKind::FragmentShader)) };
 
-            let mut vs = FragmentShader { id };
-            vs.compile(src)?;
+        let mut vs = FragmentShader { id };
+        vs.compile(src)?;
 
         Ok(vs)
     }
@@ -28,5 +28,17 @@ impl Shader for FragmentShader {
 
     fn kind(&self) -> ShaderKind {
         ShaderKind::FragmentShader
+    }
+
+    fn recompile(&mut self, src: &CStr) {
+        self.compile(src).expect("Failed to recompile shader");
+    }
+}
+
+impl Drop for FragmentShader {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteShader(self.id());
+        }
     }
 }

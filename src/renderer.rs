@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::RwLock};
 
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
 use render_target::{vertex_array::DefaultVertex, RenderTarget};
-use shader::{FragmentShader, VertexShader};
+use shader::{FragmentShader, ShaderKind, VertexShader};
 
 use crate::{assets::AssetManager, color::prelude::*};
 use pipeline_info::PipelineInfo;
@@ -24,9 +24,10 @@ pub mod shader;
 pub struct Renderer<'a, const T: usize> {
     window: GLWindow,
     plinfo: Option<PipelineInfo<'a>>,
-    clear_color: RGBAColor<f32>,
     global: RwLock<Global>,
+    clear_color: RGBAColor<f32>,
 
+    // Transfer ownership of data to engine-manager
     asset_manager: Option<AssetManager>,
     shader_programs: HashMap<&'a str, ShaderProgram<'a>>,
 
@@ -48,7 +49,7 @@ impl<'a, const T: usize> Renderer<'a, T> {
 
             debug: None,
 
-            pos: (0., 0.)
+            pos: (0., 0.),
         }
     }
 
@@ -113,6 +114,24 @@ impl<'a, const T: usize> Renderer<'a, T> {
         // Assign default shader
         self.shader_programs.insert("default", default_program);
 
+        // Register manager
+        let manager = self
+            .asset_manager()
+            .as_mut()
+            .expect("No asset-manager is registered");
+
+        let pathbuf = std::path::Path::new("./assets/shaders/default.frag").to_path_buf();
+        let asset = super::assets::Asset::new(
+            "default.frag".into(),
+            pathbuf.clone(),
+            super::assets::AssetKind::Shader,
+            "default",
+            ShaderKind::to_u8(&ShaderKind::FragmentShader)
+        )
+        .expect("Failed to initialize asset");
+        manager.create_asset(asset);
+        manager.register_for_hotreload(pathbuf);
+
         info!("Finished activating renderer");
     }
 
@@ -133,14 +152,20 @@ impl<'a, const T: usize> Renderer<'a, T> {
             [window_inner_size.width, window_inner_size.height],
         )
         .expect("Failed assigning uniform");
-        def.uniform2fv(
-            "u_Mouse",
-            1,
-            [self.pos.0 as f32, self.pos.1 as f32],
+        def.uniform2fv("u_Mouse", 1, [self.pos.0 as f32, self.pos.1 as f32])
+            .expect("Failed assigning uniform");
+        def.uniform1f("u_DeltaTime", delta_time)
+            .expect("failed to assign deltatime");
+        def.uniform1f(
+            "u_Time",
+            self.global
+                .read()
+                .unwrap()
+                .start_time()
+                .elapsed()
+                .as_secs_f32(),
         )
-        .expect("Failed assigning uniform");
-        def.uniform1f("u_DeltaTime", delta_time).expect("failed to assign deltatime");
-        def.uniform1f("u_Time", self.global.read().unwrap().start_time().elapsed().as_secs_f32()).expect("failed to assign deltatime");
+        .expect("failed to assign deltatime");
         self.debug.as_ref().unwrap().draw();
     }
 
@@ -149,6 +174,38 @@ impl<'a, const T: usize> Renderer<'a, T> {
         self.window()
             .swap_buffers()
             .expect("Failed to swap buffers");
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn update_editor(&mut self) {
+        let manager = self
+            .asset_manager()
+            .as_mut()
+            .expect("No asset-manager is registered");
+        let channel = manager
+            .channel()
+            .as_ref()
+            .expect("No reload channel has been launched");
+
+        let msg = channel.try_recv();
+        match msg {
+            Ok(m) => {
+                trace!("Received reload editor event");
+                match m.as_ref().read().unwrap().kind() {
+                    crate::assets::AssetKind::Shader => {
+                        // In the case of a shader, the identifier is used to identify the shaderprogram to reload
+                        let program = self
+                            .shader_programs
+                            .get_mut(m.as_ref().read().unwrap().identifier().as_str())
+                            .unwrap();
+                        program.reload(m.clone());
+                    }
+                    crate::assets::AssetKind::Texture => {}
+                    crate::assets::AssetKind::Video => {}
+                };
+            }
+            Err(_) => {}
+        }
     }
 
     /// Register a new asset manager

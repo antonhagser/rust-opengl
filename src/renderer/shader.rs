@@ -1,6 +1,8 @@
-use std::{collections::HashMap, ffi::CString};
+use std::{collections::HashMap, ffi::CString, sync::{Arc, RwLock}};
 
-use super::render_target::vertex_array::Vertex;
+use crate::assets::Asset;
+
+use super::render_target::vertex_array::{Vertex, VertexDefiner};
 
 pub use kind::ShaderKind;
 pub use shader::{FragmentShader, Shader, VertexShader};
@@ -11,20 +13,28 @@ mod shader;
 mod uniform;
 
 pub struct ShaderProgram<'a> {
-    shaders: Vec<Box<dyn Shader>>,
+    shaders: HashMap<ShaderKind, Box<dyn Shader>>,
+    // shaders: Vec<Box<dyn Shader>>,
     locations: HashMap<&'a str, gl::types::GLuint>,
     id: gl::types::GLuint,
+    definer: Option<VertexDefiner<'a>>,
 }
 
 impl<'a> ShaderProgram<'a> {
-    pub fn new<'v, T>(shaders: Vec<Box<dyn Shader>>) -> Result<Self, String>
+    pub fn new<T>(shaders: Vec<Box<dyn Shader>>) -> Result<Self, String>
     where
-        T: Vertex<'v>,
+        T: Vertex<'a>,
     {
+        let mut hash = HashMap::new();
+        for s in shaders {
+            hash.insert(s.kind(), s);
+        }
+
         let mut sp = ShaderProgram {
-            shaders,
+            shaders: hash,
             locations: HashMap::new(),
             id: 0,
+            definer: None,
         };
 
         // Create shader program
@@ -33,32 +43,40 @@ impl<'a> ShaderProgram<'a> {
             sp.id = gl::CreateProgram();
         }
 
+        let def = T::get_definition();
+        sp.definer = Some(def);
+        sp.internal_new()?;
+
+        Ok(sp)
+    }
+
+    fn internal_new(&mut self) -> Result<(), String> {
         // Attach the shader objects to the program
-        for shader in sp.shaders.iter() {
+        for shader in self.shaders.iter() {
             unsafe {
-                gl::AttachShader(sp.id(), shader.id());
+                gl::AttachShader(self.id(), shader.1.id());
             }
         }
 
-        for (i, field) in T::get_definition().fields().enumerate() {
+        for (i, field) in self.definer.as_ref().unwrap().fields().enumerate() {
             let raw = std::ffi::CString::new(field.name().to_string())
                 .expect("Failed at conveting shader to CString");
             unsafe {
-                gl::BindAttribLocation(sp.id, i as gl::types::GLuint, raw.as_c_str().as_ptr());
+                gl::BindAttribLocation(self.id, i as gl::types::GLuint, raw.as_c_str().as_ptr());
             }
         }
 
         // Link shaders to shaderprogram
-        sp.link()?;
+        self.link()?;
 
         // Detach shaders to allow OpenGL to delete shaders
-        for shader in sp.shaders.iter() {
+        for shader in self.shaders.iter() {
             unsafe {
-                gl::DetachShader(sp.id(), shader.id());
+                gl::DetachShader(self.id(), shader.1.id());
             }
         }
 
-        Ok(sp)
+        Ok(())
     }
 
     /// Link shader program
@@ -132,6 +150,21 @@ impl<'a> ShaderProgram<'a> {
     /// Get a reference to the shader program's id.
     pub fn id(&self) -> gl::types::GLuint {
         self.id
+    }
+
+    /// Reload shaders
+    pub fn reload(&mut self, asset: Arc<RwLock<Asset>>) {
+        trace!("Triggered internal reload of shader-program");
+        for s in self.shaders.iter_mut() {
+            let asset = asset.as_ref().read().expect("Tried to get asset reader");
+            let kind = ShaderKind::from_u8(*asset.kind_identifier());
+            if *s.0 == kind {
+                let raw = asset.raw_to_cstr();
+                s.1.recompile(raw.as_c_str());
+            }
+        }
+
+        self.internal_new().expect("Failed relinking shader program after hotreload");
     }
 }
 

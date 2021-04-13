@@ -436,6 +436,7 @@ name = "engine"
 version = "0.1.0"
 dependencies = [
  "colored",
+ "crossbeam-channel",
  "env_logger",
  "gl",
  "glutin",

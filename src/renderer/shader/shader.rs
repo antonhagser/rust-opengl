@@ -12,6 +12,8 @@ pub trait Shader {
     fn id(&self) -> gl::types::GLuint;
     fn kind(&self) -> ShaderKind;
 
+    fn recompile(&mut self, src: &CStr);
+
     /// Compiles the program from source
     fn compile(&mut self, source: &CStr) -> Result<(), String> {
         let id = self.id();
