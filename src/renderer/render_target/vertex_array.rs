@@ -5,9 +5,8 @@ mod vertex;
 
 pub use vertex::Vertex;
 pub use vertex::VertexDefiner;
-pub use vertex::VertexDefinerField;
-pub use vertex::VertexDefinerFieldKind;
-pub use vertex::VerticesArray;
+pub use vertex::VertexField;
+pub use vertex::VertexFieldKind;
 pub use vertex::DefaultVertex;
 
 pub mod indexbuffer;

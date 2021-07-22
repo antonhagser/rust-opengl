@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::CString, sync::{Arc, RwLock}};
+use std::{collections::HashMap, ffi::CString};
 
 use crate::assets::Asset;
 
@@ -153,10 +153,9 @@ impl<'a> ShaderProgram<'a> {
     }
 
     /// Reload shaders
-    pub fn reload(&mut self, asset: Arc<RwLock<Asset>>) {
+    pub fn reload(&mut self, asset: &Asset) {
         trace!("Triggered internal reload of shader-program");
         for s in self.shaders.iter_mut() {
-            let asset = asset.as_ref().read().expect("Tried to get asset reader");
             let kind = ShaderKind::from_u8(*asset.kind_identifier());
             if *s.0 == kind {
                 let raw = asset.raw_to_cstr();
@@ -164,7 +163,8 @@ impl<'a> ShaderProgram<'a> {
             }
         }
 
-        self.internal_new().expect("Failed relinking shader program after hotreload");
+        self.internal_new()
+            .expect("Failed relinking shader program after hotreload");
     }
 }
 

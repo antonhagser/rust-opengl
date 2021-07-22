@@ -7,7 +7,7 @@ where
     VERTEX: Vertex<'a>,
 {
     id: gl::types::GLuint,
-    identifier: &'a u8,
+    _identifier: &'a u8,
     vertices: [VERTEX; V],
 }
 
@@ -18,7 +18,7 @@ where
     pub fn new(vertices: [VERTEX; V]) -> Self {
         let mut vb = VertexBuffer {
             id: 0,
-            identifier: &0,
+            _identifier: &0,
             vertices,
         };
 
@@ -47,7 +47,7 @@ where
     /// Calculates the inner byte size of all vertices
     fn calculate_vertices_size(&self) -> usize {
         VERTEX::get_definition()
-            .full_size()
+            .size()
             * self.vertices().len()
     }
 
@@ -68,7 +68,7 @@ where
                     field.count() as gl::types::GLint,
                     field.kind().get_opengl_enum(),
                     gl::FALSE,
-                    definer.full_size() as gl::types::GLint,
+                    definer.size() as gl::types::GLint,
                     stride as *const gl::types::GLvoid,
                 );
                 gl::EnableVertexAttribArray(index);

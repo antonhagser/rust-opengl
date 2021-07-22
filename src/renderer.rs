@@ -1,39 +1,29 @@
-use std::{collections::HashMap, sync::RwLock};
+use std::collections::HashMap;
 
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
-use render_target::{vertex_array::DefaultVertex, RenderTarget};
-use shader::{FragmentShader, ShaderKind, VertexShader};
 
 use crate::{assets::AssetManager, color::prelude::*};
 use pipeline_info::PipelineInfo;
 
-use self::{
-    global::Global,
-    shader::{ShaderProgram, Uniform},
-};
+use self::shader::ShaderProgram;
 
 type GLWindow = ContextWrapper<PossiblyCurrent, Window>;
 
 pub mod buffer;
 pub mod camera;
-pub mod global;
 pub mod pipeline_info;
 pub mod render_target;
 pub mod shader;
+pub mod texture;
 
 pub struct Renderer<'a, const T: usize> {
     window: GLWindow,
     plinfo: Option<PipelineInfo<'a>>,
-    global: RwLock<Global>,
     clear_color: RGBAColor<f32>,
 
     // Transfer ownership of data to engine-manager
     asset_manager: Option<AssetManager>,
-    shader_programs: HashMap<&'a str, ShaderProgram<'a>>,
-
-    debug: Option<RenderTarget<'a, DefaultVertex, 4, 6>>,
-
-    pub(crate) pos: (f64, f64),
+    shader_programs: HashMap<String, ShaderProgram<'a>>,
 }
 
 impl<'a, const T: usize> Renderer<'a, T> {
@@ -42,14 +32,9 @@ impl<'a, const T: usize> Renderer<'a, T> {
             window,
             plinfo: None,
             clear_color: (HexColor::<u8>::new(0x131519).rgba() / 255),
-            global: Global::new(),
 
             asset_manager: None,
             shader_programs: HashMap::new(),
-
-            debug: None,
-
-            pos: (0., 0.),
         }
     }
 
@@ -87,89 +72,17 @@ impl<'a, const T: usize> Renderer<'a, T> {
             self.plinfo().max_vertex_attribs()
         );
 
-        let vertices = [
-            DefaultVertex::new((-1.0, -1.0, 0.0), (1.0, 0.6, 0.3)),
-            DefaultVertex::new((1.0, -1.0, 0.0), (1.0, 0.6, 0.3)),
-            DefaultVertex::new((1.0, 1.0, 0.0), (1.0, 0.6, 0.3)),
-            DefaultVertex::new((-1.0, 1.0, 0.0), (1.0, 0.6, 0.3)),
-        ];
-        self.debug = Some(RenderTarget::new(vertices, [0, 1, 2, 2, 3, 0]));
-
-        // Load default shader
-        info!("Loading default shader");
-        let raw = include_str!("../assets/shaders/default.frag").to_string();
-        let raw = std::ffi::CString::new(raw).expect("Failed at conveting shader to CString");
-        let default_fragment =
-            FragmentShader::from_source(raw.as_c_str()).expect("Failed to compile fragment");
-        let raw = include_str!("../assets/shaders/default.vert").to_string();
-        let raw = std::ffi::CString::new(raw).expect("Failed at conveting shader to CString");
-        let default_vertex =
-            VertexShader::from_source(raw.as_c_str()).expect("Failed to compile vertex");
-        let default_program = ShaderProgram::new::<DefaultVertex>(vec![
-            Box::new(default_fragment),
-            Box::new(default_vertex),
-        ])
-        .expect("Failed to set-up shader program");
-
-        // Assign default shader
-        self.shader_programs.insert("default", default_program);
-
-        // Register manager
-        let manager = self
-            .asset_manager()
-            .as_mut()
-            .expect("No asset-manager is registered");
-
-        let pathbuf = std::path::Path::new("./assets/shaders/default.frag").to_path_buf();
-        let asset = super::assets::Asset::new(
-            "default.frag".into(),
-            pathbuf.clone(),
-            super::assets::AssetKind::Shader,
-            "default",
-            ShaderKind::to_u8(&ShaderKind::FragmentShader)
-        )
-        .expect("Failed to initialize asset");
-        manager.create_asset(asset);
-        manager.register_for_hotreload(pathbuf);
-
         info!("Finished activating renderer");
     }
 
-    // Trigger draw
-    pub fn draw(&mut self, delta_time: f32) {
+    /// Trigger clear
+    pub fn clear(&mut self) {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
-
-        let window_inner_size = self.window().window().inner_size();
-        let def = self.shader_programs.get_mut("default").unwrap();
-
-        def.bind();
-
-        def.uniform2uiv(
-            "u_Resolution",
-            1,
-            [window_inner_size.width, window_inner_size.height],
-        )
-        .expect("Failed assigning uniform");
-        def.uniform2fv("u_Mouse", 1, [self.pos.0 as f32, self.pos.1 as f32])
-            .expect("Failed assigning uniform");
-        def.uniform1f("u_DeltaTime", delta_time)
-            .expect("failed to assign deltatime");
-        def.uniform1f(
-            "u_Time",
-            self.global
-                .read()
-                .unwrap()
-                .start_time()
-                .elapsed()
-                .as_secs_f32(),
-        )
-        .expect("failed to assign deltatime");
-        self.debug.as_ref().unwrap().draw();
     }
 
-    // Swap buffers
+    /// Swap buffers
     pub fn swap_buffers(&self) {
         self.window()
             .swap_buffers()
@@ -189,16 +102,20 @@ impl<'a, const T: usize> Renderer<'a, T> {
 
         let msg = channel.try_recv();
         match msg {
-            Ok(m) => {
+            Ok(asset) => {
                 trace!("Received reload editor event");
-                match m.as_ref().read().unwrap().kind() {
+                match asset.1 {
                     crate::assets::AssetKind::Shader => {
+                        let id = asset.0;
+
+                        // Fetc the asset from the asset manager
+                        let asset = self.asset_manager.as_mut().unwrap().asset(&id).unwrap();
+
                         // In the case of a shader, the identifier is used to identify the shaderprogram to reload
-                        let program = self
-                            .shader_programs
-                            .get_mut(m.as_ref().read().unwrap().identifier().as_str())
-                            .unwrap();
-                        program.reload(m.clone());
+                        let program = self.shader_programs.get_mut(asset.identifier()).unwrap();
+
+                        // Reload asset inside shader program
+                        program.reload(asset.value());
                     }
                     crate::assets::AssetKind::Texture => {}
                     crate::assets::AssetKind::Video => {}
@@ -245,5 +162,10 @@ impl<'a, const T: usize> Renderer<'a, T> {
     /// Get a reference to the renderer's asset manager.
     pub fn asset_manager(&mut self) -> &mut Option<AssetManager> {
         &mut self.asset_manager
+    }
+
+    /// Get a mutable reference to the renderer's shader programs.
+    pub fn shader_programs(&mut self) -> &mut HashMap<String, ShaderProgram<'a>> {
+        &mut self.shader_programs
     }
 }

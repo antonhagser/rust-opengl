@@ -28,4 +28,8 @@ impl<'a, VERTEX, const V: usize, const I: usize> RenderTarget<'a, VERTEX, V, I> 
             )
         }
     }
+
+    pub fn vertices(&self) -> &[VERTEX; V] {
+        self.vertex_array.vertex_buffer().vertices()
+    }
 }

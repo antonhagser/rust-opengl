@@ -8,6 +8,8 @@ pub struct PipelineInfo<'a> {
     vendor: Option<Box<&'a str>>,
     renderer: Option<Box<&'a str>>,
     max_vertex_attribs: gl::types::GLint,
+    max_texture_image_units: gl::types::GLint,
+    max_uniform_locations: gl::types::GLint,
 }
 
 impl<'a> PipelineInfo<'a> {
@@ -16,7 +18,9 @@ impl<'a> PipelineInfo<'a> {
             version: None,
             vendor: None,
             renderer: None,
-            max_vertex_attribs: 0
+            max_vertex_attribs: 0,
+            max_texture_image_units: 0,
+            max_uniform_locations: 0
         };
 
         plinfo.load_version();
@@ -49,6 +53,8 @@ impl<'a> PipelineInfo<'a> {
     pub fn load_driver_stats(&mut self) {
         unsafe {
             gl::GetIntegerv(gl::MAX_VERTEX_ATTRIBS, &mut self.max_vertex_attribs);
+            gl::GetIntegerv(gl::MAX_TEXTURE_IMAGE_UNITS, &mut self.max_texture_image_units);
+            gl::GetIntegerv(gl::MAX_UNIFORM_LOCATIONS, &mut self.max_uniform_locations);
         }
     }
 

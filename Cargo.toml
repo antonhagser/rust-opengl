@@ -1,21 +1,37 @@
+cargo-features = ["edition2021"]
+
 [package]
 name = "engine"
 version = "0.1.0"
 authors = ["Anton Hagsér <anton.hagser@epsidel.se>"]
-edition = "2018"
+edition = "2021"
+
+[lib]
+name = "engine"
+path = "src/lib.rs" 
 
 [dependencies]
 gl = "0.14.0"
-glutin = "0.26.0"
+glutin = "0.27.0"
+
 rand = "0.8.3"
-nalgebra = "0.25.4"
+nalgebra = "0.28.0"
+
 typenum = "1.13.0"
 num = "0.4.0"
+
 colored = "2.0.0"
-image = "0.23.14"
+env_logger = "0.9.0"
 log = "0.4.14"
-env_logger = "0.8.3"
+
+image = "0.23.14"
+
 smallvec = "1.6.1"
-sysinfo = "0.16.5"
+
+sysinfo = "0.19.1"
 notify = "4.0.15"
+
+thiserror = "1.0.26"
+
 crossbeam-channel = "0.5.1"
+dashmap = "4.0.2"
