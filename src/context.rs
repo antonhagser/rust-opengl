@@ -19,4 +19,14 @@ impl Context {
     pub fn engine_mut(&mut self) -> &mut Engine {
         &mut self.engine
     }
+
+    /// Get a reference to the context's asset manager.
+    pub fn asset_manager(&self) -> &AssetManager {
+        &self.asset_manager
+    }
+
+    /// Get a mutable reference to the context's asset manager.
+    pub fn asset_manager_mut(&mut self) -> &mut AssetManager {
+        &mut self.asset_manager
+    }
 }

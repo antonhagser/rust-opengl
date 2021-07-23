@@ -10,7 +10,7 @@ mod app;
 mod system;
 mod engine;
 mod context;
-mod renderer;
+pub mod renderer;
 
 pub mod assets;
 pub mod color;
