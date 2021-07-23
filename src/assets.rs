@@ -10,6 +10,7 @@ pub use asset::{Asset, AssetKind};
 
 mod asset;
 
+#[derive(Clone)]
 pub struct AssetManager {
     assets: Arc<DashMap<String, Asset>>,
     channel: Option<Receiver<(String, AssetKind)>>,

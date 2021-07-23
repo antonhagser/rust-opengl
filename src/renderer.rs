@@ -22,18 +22,18 @@ pub struct Renderer<'a, const T: usize> {
     clear_color: RGBAColor<f32>,
 
     // Transfer ownership of data to engine-manager
-    asset_manager: Option<AssetManager>,
+    asset_manager: AssetManager,
     shader_programs: HashMap<String, ShaderProgram<'a>>,
 }
 
 impl<'a, const T: usize> Renderer<'a, T> {
-    pub fn new(window: GLWindow) -> Self {
+    pub fn new(window: GLWindow, asset_manager: AssetManager) -> Self {
         Renderer {
             window,
             plinfo: None,
             clear_color: (HexColor::<u8>::new(0x131519).rgba() / 255),
 
-            asset_manager: None,
+            asset_manager,
             shader_programs: HashMap::new(),
         }
     }
@@ -48,7 +48,7 @@ impl<'a, const T: usize> Renderer<'a, T> {
         // Enable OpenGL debug logging
         unsafe {
             gl::DebugMessageCallback(
-                Some(super::opengl_error_handling),
+                Some(opengl_error_handling),
                 0 as *const gl::types::GLvoid,
             );
         }
@@ -91,11 +91,7 @@ impl<'a, const T: usize> Renderer<'a, T> {
 
     #[cfg(debug_assertions)]
     pub fn update_editor(&mut self) {
-        let manager = self
-            .asset_manager()
-            .as_mut()
-            .expect("No asset-manager is registered");
-        let channel = manager
+        let channel = self.asset_manager
             .channel()
             .as_ref()
             .expect("No reload channel has been launched");
@@ -109,7 +105,7 @@ impl<'a, const T: usize> Renderer<'a, T> {
                         let id = asset.0;
 
                         // Fetc the asset from the asset manager
-                        let asset = self.asset_manager.as_mut().unwrap().asset(&id).unwrap();
+                        let asset = self.asset_manager.asset(&id).unwrap();
 
                         // In the case of a shader, the identifier is used to identify the shaderprogram to reload
                         let program = self.shader_programs.get_mut(asset.identifier()).unwrap();
@@ -123,11 +119,6 @@ impl<'a, const T: usize> Renderer<'a, T> {
             }
             Err(_) => {}
         }
-    }
-
-    /// Register a new asset manager
-    pub fn register_asset_manager(&mut self, asset_manager: AssetManager) {
-        self.asset_manager = Some(asset_manager);
     }
 
     /// Get a reference to the renderer's window.
@@ -159,13 +150,38 @@ impl<'a, const T: usize> Renderer<'a, T> {
         &self.clear_color
     }
 
-    /// Get a reference to the renderer's asset manager.
-    pub fn asset_manager(&mut self) -> &mut Option<AssetManager> {
-        &mut self.asset_manager
-    }
-
     /// Get a mutable reference to the renderer's shader programs.
     pub fn shader_programs(&mut self) -> &mut HashMap<String, ShaderProgram<'a>> {
         &mut self.shader_programs
     }
+}
+
+#[no_mangle]
+pub extern "system" fn opengl_error_handling(
+    source: gl::types::GLenum,
+    kind: gl::types::GLenum,
+    id: gl::types::GLuint,
+    severity: gl::types::GLenum,
+    _: gl::types::GLsizei,
+    message: *const gl::types::GLchar,
+    _: *mut gl::types::GLvoid,
+) {
+    use colored::Colorize;
+
+    let msg = unsafe { std::ffi::CStr::from_ptr(message) };
+
+    warn!(
+        "{}{} {:#X} {} {:#X} {} {:#X} {} {:#X} {} {}",
+        "OpenGL Error:\n\t",
+        "Source:".green(),
+        source,
+        "Kind:".green(),
+        kind,
+        "Id:".green(),
+        id,
+        "Severity:".green(),
+        severity,
+        "\n\tMessage:".green(),
+        msg.to_string_lossy().red()
+    );
 }

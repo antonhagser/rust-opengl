@@ -6,17 +6,17 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new_perspective() -> Camera {
-        let proj = na::Matrix4::<f32>::identity();
-        let view = na::Matrix4::<f32>::identity();
+    // pub fn new_perspective() -> Camera {
+    //     let proj = na::Matrix4::<f32>::identity();
+    //     let view = na::Matrix4::<f32>::identity();
 
-        Camera {
-            proj,
-            view
-        }
-    }
+    //     Camera {
+    //         proj,
+    //         view
+    //     }
+    // }
 
-    pub fn new_orthographic(left: f32, right: f32, bottom: f32, top: f32, zfar: f32, znear: f32) -> Camera {
+    pub fn ortho(left: f32, right: f32, bottom: f32, top: f32, znear: f32, zfar: f32) -> Camera {
         let mut proj = na::Matrix4::<f32>::identity();
         let two: f32 = num::cast(2.0).unwrap();
         proj[(0, 0)] = two / (right - left);
